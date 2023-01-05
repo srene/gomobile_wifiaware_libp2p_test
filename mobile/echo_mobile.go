@@ -41,8 +41,15 @@ func Init(listenPort int, wsDriver WifiAwareServerDriver, wcDriver WifiAwareClie
 		ctx:    ctx,
 		cancel: cancel,
 	}
+	ha, err := makeBasicHost("::", listenPort, false, 0)
+	if err != nil {
+		fmt.Println(err)
+	}
+	fmt.Println(ha.ID())
 
-	service, err := NewWifiAwareService()
+	test.ha = ha
+
+	service, err := NewWifiAwareService(ha.ID().String())
 	if err != nil {
 		fmt.Println("ble discovery setup failed : ", err.Error())
 		cancel()
@@ -55,20 +62,12 @@ func Init(listenPort int, wsDriver WifiAwareServerDriver, wcDriver WifiAwareClie
 
 }
 
-func StartListener(listenAddress string, listenPort int) {
+func StartListener() {
 
 	//ctx, cancel := context.WithCancel(context.Background())
 	//defer cancel()
 
-	fmt.Printf("Starting Listener %s", listenAddress)
-
-	ha, err := makeBasicHost(listenAddress, listenPort, false, 0)
-	if err != nil || ha == nil {
-		fmt.Printf("Failed to build host %s", err)
-	}
-	fmt.Println(ha)
-
-	test.ha = ha
+	fmt.Printf("Starting Listener")
 
 	fullAddr := getHostAddress(test.ha)
 	fmt.Printf("I am %s\n", fullAddr)
@@ -89,20 +88,12 @@ func StartListener(listenAddress string, listenPort int) {
 
 }
 
-func RunSender(listenAddress string, listenPort int, targetPeer string) {
+func RunSender(targetPeer string) {
 
 	//ctx, cancel := context.WithCancel(context.Background())
 	//defer cancel()
 
-	fmt.Printf("Starting Sender %s", listenAddress)
-
-	ha, err := makeBasicHost(listenAddress, listenPort, false, 0)
-	if err != nil {
-		fmt.Println(err)
-	}
-	fmt.Println(ha.ID())
-
-	test.ha = ha
+	fmt.Printf("Starting Sender")
 
 	fullAddr := getHostAddress(test.ha)
 	fmt.Printf("I am %s\n", fullAddr)
