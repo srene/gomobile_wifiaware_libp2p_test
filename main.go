@@ -24,11 +24,12 @@ import (
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	//golog.SetLogLevel("swarm2", "debug")
 
 	// LibP2P code uses golog to log messages. They log with different
 	// string IDs (i.e. "swarm"). We can control the verbosity level for
 	// all loggers with:
-	golog.SetAllLoggers(golog.LevelInfo) // Change to INFO for extra info
+	golog.SetAllLoggers(golog.LevelDebug) // Change to INFO for extra info
 
 	// Parse options from the command line
 	listenF := flag.Int("l", 0, "wait for incoming connections")
@@ -73,10 +74,10 @@ func makeBasicHost(listenPort int, insecure bool, randseed int64) (host.Host, er
 		return nil, err
 	}
 
-	//ip := "fe80::7865:ef0a:a06b:93ff%eno1"
+	//ip := "fe80::7865:ef0a:a06b:93ff"
 	ip := "::"
 	opts := []libp2p.Option{
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip6/%s/tcp/%d", ip, listenPort)),
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip6zone/eno1/ip6/%s/tcp/%d", ip, listenPort)),
 		libp2p.Identity(priv),
 		libp2p.DisableRelay(),
 	}

@@ -12,7 +12,7 @@ type WifiAwareServerDriver interface {
 
 type WifiAwareNotifier interface {
 	OnConnectionFailure(message string)
-	OnConnectionServerSuccess(ip string, port int) string
+	OnConnectionServerSuccess(ip string, zone string, port int) string
 	OnConnectionClientSuccess(ip string, zone string, port int, peerId string)
 	OnDisconnect()
 }

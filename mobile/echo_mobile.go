@@ -1,27 +1,24 @@
 package datahop
 
 import (
-	"bufio"
 	"context"
-	"crypto/rand"
 	"fmt"
-	"io"
-	mrand "math/rand"
+	"io/ioutil"
+	"net"
 
 	//	logger "github.com/ipfs/go-log/v2"
 
-	"github.com/srene/go-libp2p"
-	"github.com/srene/go-libp2p/core/crypto"
-	"github.com/srene/go-libp2p/core/host"
-	"github.com/srene/go-libp2p/core/network"
-	"github.com/srene/go-libp2p/core/peer"
-	"github.com/srene/go-libp2p/core/peerstore"
+	"github.com/libp2p/go-libp2p/core/host"
 
-	ma "github.com/srene/go-multiaddr"
+	"github.com/ipfs/go-log/v2"
 )
 
 var (
 	test *echo
+)
+
+const (
+	CONN_TYPE = "tcp6"
 )
 
 type echo struct {
@@ -33,6 +30,8 @@ type echo struct {
 }
 
 func Init(listenPort int) error {
+
+	log.SetAllLoggers(log.LevelDebug)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -55,168 +54,83 @@ func Init(listenPort int) error {
 
 }
 
-func StartListener() string {
+func StartListener(address string) {
 
-	//ctx, cancel := context.WithCancel(context.Background())
-	//defer cancel()
+	fmt.Println("Starting listener " + address)
 
-	ha, err := makeBasicHost("::", test.listenPort, false, 0)
+	l, err := net.Listen(CONN_TYPE, address)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error listening:", err.Error())
+		//os.Exit(1)
+		return
 	}
-	fmt.Println(ha.ID())
+	defer l.Close()
+	fmt.Println("Listening on " + address)
 
-	test.ha = ha
-	fmt.Printf("Starting Listener")
-
-	fullAddr := getHostAddress(test.ha)
-	fmt.Printf("I am %s\n", fullAddr)
-
-	// Set a stream handler on host A. /echo/1.0.0 is
-	// a user-defined protocol name.
-	test.ha.SetStreamHandler("/echo/1.0.0", func(s network.Stream) {
-		fmt.Println("listener received new stream")
-		if err := doEcho(s); err != nil {
-			fmt.Println(err)
-			s.Reset()
-		} else {
-			s.Close()
+	for {
+		conn, err := l.Accept()
+		if err != nil {
+			fmt.Println("Error accepting: ", err.Error())
+			//os.Exit(1)
 		}
-	})
-
-	fmt.Println("listening for connections")
-
-	return test.ha.ID().String()
+		go handleRequest(conn)
+	}
 }
 
-func RunSender(targetPeer string) {
+func RunSender(address string) {
 
-	//ctx, cancel := context.WithCancel(context.Background())
-	//defer cancel()
-
-	fmt.Printf("Starting Sender")
-
-	fullAddr := getHostAddress(test.ha)
-	fmt.Printf("I am %s\n", fullAddr)
-
-	// Set a stream handler on host A. /echo/1.0.0 is
-	// a user-defined protocol name.
-
-	test.ha.SetStreamHandler("/echo/1.0.0", func(s network.Stream) {
-		fmt.Println("sender received new stream")
-		if err := doEcho(s); err != nil {
-			fmt.Println(err)
-			s.Reset()
-		} else {
-			s.Close()
-		}
-	})
-
-	fmt.Printf("Connecting to %s\n", targetPeer)
-
-	// Turn the targetPeer into a multiaddr.
-	maddr, err := ma.NewMultiaddr(targetPeer)
+	fmt.Println("Connecting " + CONN_TYPE + " " + address)
+	conn, err := net.Dial(CONN_TYPE, address)
 	if err != nil {
-		fmt.Println(err)
+		fmt.Println("Error connecting " + err.Error())
 		return
+		//os.Exit(1)
 	}
 
-	// Extract the peer ID from the multiaddr.
-	info, err := peer.AddrInfoFromP2pAddr(maddr)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	// We have a peer ID and a targetAddr so we add it to the peerstore
-	// so LibP2P knows how to contact it
-	test.ha.Peerstore().AddAddrs(info.ID, info.Addrs, peerstore.PermanentAddrTTL)
-
-	fmt.Printf("sender opening stream %s %s", info.ID, info.Addrs)
-	// make a new stream from host B to host A
-	// it should be handled on host A by the handler we set above because
-	// we use the same /echo/1.0.0 protocol
-	s, err := test.ha.NewStream(context.Background(), info.ID, "/echo/1.0.0")
-	if err != nil {
-
-		fmt.Printf("New stream error %s", err)
-		return
-	}
-
-	fmt.Println("sender saying hello")
-	_, err = s.Write([]byte("Hello, world!\n"))
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	out, err := io.ReadAll(s)
-	if err != nil {
-		fmt.Println(err)
-		return
-	}
-
-	fmt.Printf("read reply: %q\n", out)
-}
-
-// makeBasicHost creates a LibP2P host with a random peer ID listening on the
-// given multiaddress. It won't encrypt the connection if insecure is true.
-func makeBasicHost(listenAddress string, listenPort int, insecure bool, randseed int64) (host.Host, error) {
-	var r io.Reader
-	if randseed == 0 {
-		r = rand.Reader
-	} else {
-		r = mrand.New(mrand.NewSource(randseed))
-	}
-
-	// Generate a key pair for this host. We will use it at least
-	// to obtain a valid host ID.
-	priv, _, err := crypto.GenerateKeyPairWithReader(crypto.RSA, 2048, r)
-	if err != nil {
-		return nil, err
-	}
-
-	opts := []libp2p.Option{
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip6/%s/tcp/%d", listenAddress, listenPort)),
-		libp2p.Identity(priv),
-		libp2p.DisableRelay(),
-	}
-
-	if insecure {
-		opts = append(opts, libp2p.NoSecurity)
-	}
-
-	return libp2p.New(opts...)
-}
-
-func getHostAddress(ha host.Host) string {
-	// Build host multiaddress
-	hostAddr, _ := ma.NewMultiaddr(fmt.Sprintf("/p2p/%s", ha.ID()))
-
-	// Now we can build a full multiaddress to reach this host
-	// by encapsulating both addresses:
-	addr := ha.Addrs()[0]
-	return addr.Encapsulate(hostAddr).String()
-}
-
-// doEcho reads a line of data a stream and writes it back
-func doEcho(s network.Stream) error {
-	buf := bufio.NewReader(s)
-	str, err := buf.ReadString('\n')
-	if err != nil {
-		return err
-	}
-	fmt.Printf("read: %s", str)
-	_, err = s.Write([]byte(str))
-	return err
+	ReadNWrite(conn)
+	conn.Close()
 }
 
 // GetDiscoveryNotifier returns discovery notifier
 func GetPeerId() string {
-	return test.ha.ID().String()
+	return "QmVoW6bbThjrahCu8AdkLewnXhLp2nDHxNFDVudMZiCFQn"
 }
 
 // GetDiscoveryNotifier returns discovery notifier
 func GetWifiAwareNotifier() WifiAwareNotifier {
 	return test.wService
+}
+
+func ReadNWrite(conn net.Conn) {
+	fmt.Println("TEst request")
+	message := "Test Request\n"
+	_, write_err := conn.Write([]byte(message))
+	if write_err != nil {
+		fmt.Println("failed:", write_err)
+		return
+	}
+	conn.(*net.TCPConn).CloseWrite()
+
+	buf, read_err := ioutil.ReadAll(conn)
+	if read_err != nil {
+		fmt.Println("failed:", read_err)
+		return
+	}
+	fmt.Println(string(buf))
+}
+
+func handleRequest(conn net.Conn) {
+	buf, read_err := ioutil.ReadAll(conn)
+	if read_err != nil {
+		fmt.Println("failed:", read_err)
+		return
+	}
+	fmt.Println("Got: ", string(buf))
+
+	_, write_err := conn.Write([]byte("Message received.\n"))
+	if write_err != nil {
+		fmt.Println("failed:", write_err)
+		return
+	}
+	conn.Close()
 }
